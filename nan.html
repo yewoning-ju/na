@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>근무표 · 월말 정산표</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<style>
+  :root{
+    --bg:#f4f1ea;
+    --paper:#fffdf8;
+    --ink:#2b2925;
+    --muted:#7d776c;
+    --line:#d7d0c4;
+    --head:#3d382f;
+    --accent:#8a6e4b;
+    --sat:#1f5ebd;
+    --sun:#d13a32;
+    --holiday:#d13a32;
+    --soft:#eee8de;
+    --green:#4f6f58;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:Pretendard,"Noto Sans KR",Apple SD Gothic Neo,Arial,sans-serif}
+  .wrap{max-width:1600px;margin:0 auto;padding:28px 22px 60px}
+  h1{margin:0 0 6px;font-size:28px;letter-spacing:-.03em}
+  .sub{color:var(--muted);margin-bottom:20px;font-size:14px}
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+  select,input[type="number"],button,textarea{font:inherit}
+  select,input[type="number"]{height:38px;border:1px solid var(--line);border-radius:9px;background:white;padding:0 10px;color:var(--ink)}
+  button{height:38px;border:0;border-radius:9px;padding:0 14px;cursor:pointer;background:var(--head);color:#fff;font-weight:700}
+  button.alt{background:var(--accent)}
+  button.soft{background:var(--soft);color:var(--ink);border:1px solid var(--line)}
+  button.green{background:var(--green)}
+  button.danger{background:#9d473f}
+  .spacer{flex:1}
+  .tabs{display:flex;gap:6px;margin:14px 0 10px}
+  .tab{background:#e7e0d5;color:var(--ink)}
+  .tab.active{background:var(--head);color:#fff}
+  .panel{display:none}
+  .panel.active{display:block}
+  .tablebox{overflow:auto;border:1px solid var(--line);border-radius:12px;background:white;box-shadow:0 4px 18px rgba(70,55,35,.05)}
+  table{border-collapse:collapse;min-width:1280px;width:100%;table-layout:fixed}
+  th,td{border:1px solid #d7d7d7;text-align:center;height:34px;padding:0;font-size:13px}
+  th{background:#f0ece6;font-weight:800;position:sticky;top:0;z-index:3}
+  th.id,td.id{width:72px;min-width:72px}
+  th.name,td.name{width:88px;min-width:88px}
+  th.day,td.day{width:42px;min-width:42px}
+  th.total,td.total{width:58px;min-width:58px}
+  td input{width:100%;height:100%;border:0;outline:0;text-align:center;background:transparent;font-weight:700;color:inherit}
+  td input.idinput,td input.nameinput{font-weight:500}
+  .sat{color:var(--sat)!important}
+  .sun,.holiday{color:var(--sun)!important}
+  .annual{color:var(--sun)!important}
+  .label-holiday{font-size:9px;display:block;line-height:10px;color:var(--sun);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 2px}
+  .totalval{font-weight:900}
+  .note{margin-top:10px;color:var(--muted);font-size:12px;line-height:1.6}
+  .settings{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .card h3{margin:0 0 8px;font-size:15px}
+  textarea{width:100%;min-height:140px;border:1px solid var(--line);border-radius:9px;padding:10px;resize:vertical;background:#fff}
+  .badge{display:inline-block;padding:4px 8px;border-radius:999px;background:var(--soft);font-size:11px;color:var(--muted)}
+  .warn{background:#fff5e6;border:1px solid #ead0a5;border-radius:10px;padding:10px 12px;margin-top:10px;font-size:12px;color:#7b5b2c;display:none}
+  @media(max-width:800px){.settings{grid-template-columns:1fr}.wrap{padding:16px 10px 40px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>근무표 · 월말 정산표</h1>
+  <div class="sub">A / P / 년 입력 → 주 단위(일~토) 첫 빈칸은 주휴, 두 번째 빈칸은 휴무 → 엑셀 다운로드</div>
+
+  <div class="toolbar">
+    <select id="year"></select>
+    <select id="month"></select>
+    <button class="soft" id="applyMonth">달력 적용</button>
+    <button class="soft" id="addEmployee">직원 추가</button>
+    <button class="danger" id="deleteEmployee">마지막 직원 삭제</button>
+    <span class="spacer"></span>
+    <button class="alt" id="makeSettlement">월말 정산표 만들기</button>
+    <button class="green" id="downloadXlsx">엑셀 다운로드</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="schedulePanel">근무표</button>
+    <button class="tab" data-tab="settlementPanel">월말 정산표</button>
+    <button class="tab" data-tab="settingsPanel">설정</button>
+  </div>
+
+  <section id="schedulePanel" class="panel active">
+    <div class="tablebox"><table id="scheduleTable"></table></div>
+    <div class="note">입력값은 자동 저장됩니다. 빈칸은 비워두세요. <b>년</b>은 연차로 인식해 빨간색으로 표시합니다.</div>
+  </section>
+
+  <section id="settlementPanel" class="panel">
+    <div class="tablebox"><table id="settlementTable"></table></div>
+    <div id="carryWarn" class="warn">월초 첫 주가 전월과 이어지는데 전월 데이터가 저장되어 있지 않습니다. 이 경우 월초 첫 주는 현재 월에 보이는 날짜만 기준으로 주휴/휴무를 판단합니다.</div>
+    <div class="note"><b>계</b>는 원래 근무표에서 값이 입력된 칸(A/P/년 등)만 셉니다. 자동 생성된 <b>주휴·휴무는 계에 포함하지 않습니다.</b></div>
+  </section>
+
+  <section id="settingsPanel" class="panel">
+    <div class="settings">
+      <div class="card">
+        <h3>공휴일 목록 <span class="badge">YYYY-MM-DD,공휴일명</span></h3>
+        <textarea id="holidayText"></textarea>
+        <div class="note">날짜만 입력해도 됩니다. 한 줄에 하나씩 입력하세요. 저장 후 해당 날짜 열 전체가 빨간색으로 표시됩니다.</div>
+        <button class="soft" id="saveHolidays" style="margin-top:8px">공휴일 저장</button>
+      </div>
+      <div class="card">
+        <h3>사용 방법</h3>
+        <div class="note" style="font-size:13px;color:var(--ink)">
+          1. 연도·월을 고르고 <b>달력 적용</b><br>
+          2. 근무표에 A / P / 년 등을 입력<br>
+          3. <b>월말 정산표 만들기</b> 클릭<br>
+          4. <b>엑셀 다운로드</b> 클릭<br><br>
+          색상 규칙: 토요일 파랑 / 일요일 빨강 / 공휴일 빨강 / 연차(년) 빨강
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const DEFAULT_EMPLOYEES = [
+  ['5753','김종환'],['','조용식'],['3806','조경진'],['','고재홍'],['3808','홍향기'],['','김남윤'],
+  ['5789','이복순'],['','유광식'],['5751','김용복'],['','김환선'],['3804','조윤성'],['','오영필'],
+  ['5754','김인숙'],['','조길수'],['6506','김승일'],['','조성용'],['5794','박정훈'],['','심연재']
+];
+
+const DEFAULT_HOLIDAYS_2026 = `2026-01-01,신정
+2026-02-16,설날 연휴
+2026-02-17,설날
+2026-02-18,설날 연휴
+2026-03-01,삼일절
+2026-03-02,대체공휴일
+2026-05-05,어린이날
+2026-05-24,부처님오신날
+2026-05-25,대체공휴일
+2026-06-06,현충일
+2026-08-15,광복절
+2026-08-17,대체공휴일
+2026-09-24,추석 연휴
+2026-09-25,추석
+2026-09-26,추석 연휴
+2026-10-03,개천절
+2026-10-05,대체공휴일
+2026-10-09,한글날
+2026-12-25,성탄절`;
+
+const $ = s => document.querySelector(s);
+const yearSel = $('#year'), monthSel = $('#month');
+for(let y=2025;y<=2030;y++){ const o=document.createElement('option'); o.value=y;o.textContent=`${y}년`;yearSel.appendChild(o); }
+for(let m=1;m<=12;m++){ const o=document.createElement('option'); o.value=m;o.textContent=`${m}월`;monthSel.appendChild(o); }
+yearSel.value='2026'; monthSel.value='10';
+
+function monthKey(y,m){ return `work_${y}_${String(m).padStart(2,'0')}`; }
+function empKey(){ return 'work_employees_v1'; }
+function holidayKey(){ return 'work_holidays_v1'; }
+function daysInMonth(y,m){ return new Date(y,m,0).getDate(); }
+function dateStr(y,m,d){ return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
+function loadEmployees(){ try{return JSON.parse(localStorage.getItem(empKey()))||DEFAULT_EMPLOYEES.map(x=>[...x]);}catch(e){return DEFAULT_EMPLOYEES.map(x=>[...x]);} }
+function saveEmployees(v){ localStorage.setItem(empKey(),JSON.stringify(v)); }
+function loadMonth(y,m){ try{return JSON.parse(localStorage.getItem(monthKey(y,m)))||{};}catch(e){return{};} }
+function saveMonth(y,m,data){ localStorage.setItem(monthKey(y,m),JSON.stringify(data)); }
+function parseHolidays(){
+  const raw=localStorage.getItem(holidayKey()) || DEFAULT_HOLIDAYS_2026;
+  const map={}; raw.split(/\n+/).forEach(line=>{ const [dt,...name]=line.split(','); if(/^\d{4}-\d{2}-\d{2}$/.test((dt||'').trim())) map[dt.trim()]=(name.join(',').trim()||'공휴일'); });
+  return map;
+}
+function dayClass(y,m,d){ const dow=new Date(y,m-1,d).getDay(); const hol=parseHolidays()[dateStr(y,m,d)]; return {dow,hol,cls:hol?'holiday':dow===0?'sun':dow===6?'sat':''}; }
+
+function buildTable(table, mode='schedule'){
+  const y=+yearSel.value,m=+monthSel.value,n=daysInMonth(y,m), emps=loadEmployees(), data=loadMonth(y,m);
+  table.innerHTML='';
+  const thead=document.createElement('thead'), hr=document.createElement('tr');
+  ['번호','성명'].forEach((t,i)=>{const th=document.createElement('th');th.textContent=t;th.className=i===0?'id':'name';hr.appendChild(th)});
+  for(let d=1;d<=n;d++){
+    const inf=dayClass(y,m,d),th=document.createElement('th');th.className=`day ${inf.cls}`;
+    th.innerHTML=`${d}${inf.hol?`<span class="label-holiday">${inf.hol}</span>`:''}`; hr.appendChild(th);
+  }
+  const th=document.createElement('th'); th.textContent='계';th.className='total';hr.appendChild(th);
+  thead.appendChild(hr);table.appendChild(thead);
+  const tb=document.createElement('tbody');
+
+  const settlement = mode==='settlement' ? makeSettlementData(y,m,emps,data) : null;
+  emps.forEach((emp,r)=>{
+    const tr=document.createElement('tr');
+    const tdId=document.createElement('td');tdId.className='id';
+    const tdNm=document.createElement('td');tdNm.className='name';
+    if(mode==='schedule'){
+      const idIn=document.createElement('input');idIn.className='idinput';idIn.value=emp[0]; idIn.addEventListener('change',()=>updateEmp(r,0,idIn.value));tdId.appendChild(idIn);
+      const nmIn=document.createElement('input');nmIn.className='nameinput';nmIn.value=emp[1]; nmIn.addEventListener('change',()=>updateEmp(r,1,nmIn.value));tdNm.appendChild(nmIn);
+    }else{tdId.textContent=emp[0];tdNm.textContent=emp[1];}
+    tr.append(tdId,tdNm);
+    let count=0;
+    for(let d=1;d<=n;d++){
+      const td=document.createElement('td'); const inf=dayClass(y,m,d);td.className=`day ${inf.cls}`;
+      const raw=((data[r]||{})[d]||'').trim();
+      const val=mode==='settlement'?settlement[r][d]:raw;
+      if(raw!=='') count++;
+      if(mode==='schedule'){
+        const inp=document.createElement('input');inp.value=val; if(val==='년') inp.classList.add('annual');
+        inp.addEventListener('input',()=>{ if(inp.value.trim()==='년') inp.classList.add('annual'); else inp.classList.remove('annual'); updateCell(r,d,inp.value); });
+        td.appendChild(inp);
+      } else {
+        td.textContent=val; if(val==='년') td.classList.add('annual');
+      }
+      tr.appendChild(td);
+    }
+    const t=document.createElement('td');t.className='total totalval';t.textContent=count;tr.appendChild(t);tb.appendChild(tr);
+  });
+  table.appendChild(tb);
+}
+
+function updateEmp(r,c,v){ const e=loadEmployees(); e[r][c]=v; saveEmployees(e); buildTable($('#settlementTable'),'settlement'); }
+function updateCell(r,d,v){ const y=+yearSel.value,m=+monthSel.value,data=loadMonth(y,m); if(!data[r])data[r]={}; data[r][d]=v.trim(); saveMonth(y,m,data); buildTable($('#settlementTable'),'settlement'); }
+
+function previousMonth(y,m){ return m===1?[y-1,12]:[y,m-1]; }
+function makeSettlementData(y,m,emps,data){
+  const n=daysInMonth(y,m),out={}; let missingPrev=false;
+  for(let r=0;r<emps.length;r++){
+    out[r]={};
+    for(let d=1;d<=n;d++) out[r][d]=((data[r]||{})[d]||'').trim();
+    let d=1;
+    while(d<=n){
+      const date=new Date(y,m-1,d), dow=date.getDay();
+      const weekStart=d-dow, weekEnd=Math.min(n,weekStart+6);
+      let blanksBefore=0;
+      if(weekStart<1){
+        const [py,pm]=previousMonth(y,m), pData=loadMonth(py,pm), pn=daysInMonth(py,pm);
+        const daysPrev=1-weekStart;
+        if(Object.keys(pData).length===0) missingPrev=true;
+        for(let k=daysPrev;k>=1;k--){ const pd=pn-k+1; const pv=((pData[r]||{})[pd]||'').trim(); if(pv==='')blanksBefore++; }
+      }
+      let blankCount=blanksBefore;
+      for(let x=Math.max(1,weekStart);x<=weekEnd;x++){
+        if(out[r][x]===''){
+          blankCount++;
+          if(blankCount===1) out[r][x]='주휴';
+          else if(blankCount===2) out[r][x]='휴무';
+        }
+      }
+      d=weekEnd+1;
+    }
+  }
+  $('#carryWarn').style.display=missingPrev?'block':'none';
+  return out;
+}
+
+function applyMonth(){ buildTable($('#scheduleTable'),'schedule'); buildTable($('#settlementTable'),'settlement'); }
+function addEmployee(){ const e=loadEmployees();e.push(['','']);saveEmployees(e);applyMonth(); }
+function deleteEmployee(){ const e=loadEmployees(); if(e.length<=1)return; e.pop();saveEmployees(e);applyMonth(); }
+
+function showTab(id){ document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active',p.id===id)); document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===id)); }
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));
+
+function excelStyleForDay(y,m,d){
+  const inf=dayClass(y,m,d); const color=inf.hol||inf.dow===0?'D13A32':inf.dow===6?'1F5EBD':'2B2925';
+  return {font:{bold:true,color:{rgb:color}},alignment:{horizontal:'center',vertical:'center'},fill:{fgColor:{rgb:'F0ECE6'}},border:thinBorder()};
+}
+function thinBorder(){return {top:{style:'thin',color:{rgb:'D7D7D7'}},bottom:{style:'thin',color:{rgb:'D7D7D7'}},left:{style:'thin',color:{rgb:'D7D7D7'}},right:{style:'thin',color:{rgb:'D7D7D7'}}};}
+function cellStyle(color='2B2925',bold=false){return {font:{bold,color:{rgb:color}},alignment:{horizontal:'center',vertical:'center'},border:thinBorder()};}
+
+function makeSheetAOA(mode){
+  const y=+yearSel.value,m=+monthSel.value,n=daysInMonth(y,m),emps=loadEmployees(),data=loadMonth(y,m),sett=makeSettlementData(y,m,emps,data);
+  const rows=[]; rows.push(['번호','성명',...Array.from({length:n},(_,i)=>i+1),'계']);
+  emps.forEach((emp,r)=>{
+    const vals=[];let cnt=0;
+    for(let d=1;d<=n;d++){const raw=((data[r]||{})[d]||'').trim(); if(raw)cnt++; vals.push(mode==='settlement'?sett[r][d]:raw);}
+    rows.push([emp[0],emp[1],...vals,cnt]);
+  }); return rows;
+}
+function styleSheet(ws,mode){
+  const y=+yearSel.value,m=+monthSel.value,n=daysInMonth(y,m),emps=loadEmployees();
+  const range=XLSX.utils.decode_range(ws['!ref']);
+  for(let r=range.s.r;r<=range.e.r;r++){
+    for(let c=range.s.c;c<=range.e.c;c++){
+      const addr=XLSX.utils.encode_cell({r,c}); if(!ws[addr])continue;
+      if(r===0){
+        if(c>=2&&c<2+n) ws[addr].s=excelStyleForDay(y,m,c-1);
+        else ws[addr].s={font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'3D382F'}},alignment:{horizontal:'center',vertical:'center'},border:thinBorder()};
+      }else{
+        let color='2B2925'; const v=String(ws[addr].v??'');
+        if(c>=2&&c<2+n){ const inf=dayClass(y,m,c-1); if(v==='년'||inf.hol||inf.dow===0) color='D13A32'; else if(inf.dow===6) color='1F5EBD'; }
+        ws[addr].s=cellStyle(color,c===range.e.c);
+      }
+    }
+  }
+  ws['!cols']=[{wch:8},{wch:10},...Array.from({length:n},()=>({wch:5})),{wch:7}];
+  ws['!rows']=[{hpt:28},...Array.from({length:emps.length},()=>({hpt:24}))];
+  ws['!freeze']={xSplit:2,ySplit:1};
+}
+function downloadXlsx(){
+  if(typeof XLSX==='undefined'){alert('엑셀 라이브러리를 불러오지 못했습니다. 인터넷 연결 후 다시 시도해주세요.');return;}
+  const y=+yearSel.value,m=+monthSel.value;
+  const wb=XLSX.utils.book_new();
+  const ws1=XLSX.utils.aoa_to_sheet(makeSheetAOA('schedule'));styleSheet(ws1,'schedule');XLSX.utils.book_append_sheet(wb,ws1,'근무표');
+  const ws2=XLSX.utils.aoa_to_sheet(makeSheetAOA('settlement'));styleSheet(ws2,'settlement');XLSX.utils.book_append_sheet(wb,ws2,'월말 정산표');
+  XLSX.writeFile(wb,`${y}년_${String(m).padStart(2,'0')}월_근무표_정산표.xlsx`);
+}
+
+$('#applyMonth').addEventListener('click',applyMonth);
+$('#addEmployee').addEventListener('click',addEmployee);
+$('#deleteEmployee').addEventListener('click',deleteEmployee);
+$('#makeSettlement').addEventListener('click',()=>{buildTable($('#settlementTable'),'settlement');showTab('settlementPanel');});
+$('#downloadXlsx').addEventListener('click',downloadXlsx);
+$('#holidayText').value=localStorage.getItem(holidayKey())||DEFAULT_HOLIDAYS_2026;
+$('#saveHolidays').addEventListener('click',()=>{localStorage.setItem(holidayKey(),$('#holidayText').value.trim());applyMonth();alert('공휴일 목록을 저장했습니다.');});
+
+applyMonth();
+</script>
+</body>
+</html>
