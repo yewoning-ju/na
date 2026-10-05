@@ -168,6 +168,35 @@ function parseHolidays(){
 }
 function dayClass(y,m,d){ const dow=new Date(y,m-1,d).getDay(); const hol=parseHolidays()[dateStr(y,m,d)]; return {dow,hol,cls:hol?'holiday':dow===0?'sun':dow===6?'sat':''}; }
 
+function handleArrowNavigation(e){
+  if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) return;
+  const current=e.currentTarget;
+  const td=current.closest('td');
+  const tr=current.closest('tr');
+  const tbody=tr?.parentElement;
+  if(!td || !tr || !tbody) return;
+
+  const rows=[...tbody.querySelectorAll(':scope > tr')];
+  const rowIndex=rows.indexOf(tr);
+  const colIndex=td.cellIndex;
+  let targetRow=rowIndex, targetCol=colIndex;
+
+  if(e.key==='ArrowLeft') targetCol--;
+  if(e.key==='ArrowRight') targetCol++;
+  if(e.key==='ArrowUp') targetRow--;
+  if(e.key==='ArrowDown') targetRow++;
+
+  if(targetRow<0 || targetRow>=rows.length) return;
+  const cells=rows[targetRow].cells;
+  if(targetCol<0 || targetCol>=cells.length) return;
+  const target=cells[targetCol].querySelector('input');
+  if(!target) return;
+
+  e.preventDefault();
+  target.focus();
+  target.select();
+}
+
 function buildTable(table, mode='schedule'){
   const y=+yearSel.value,m=+monthSel.value,n=daysInMonth(y,m), emps=loadEmployees(), data=loadMonth(y,m);
   table.innerHTML='';
@@ -187,8 +216,8 @@ function buildTable(table, mode='schedule'){
     const tdId=document.createElement('td');tdId.className='id';
     const tdNm=document.createElement('td');tdNm.className='name';
     if(mode==='schedule'){
-      const idIn=document.createElement('input');idIn.className='idinput';idIn.value=emp[0]; idIn.addEventListener('change',()=>updateEmp(r,0,idIn.value));tdId.appendChild(idIn);
-      const nmIn=document.createElement('input');nmIn.className='nameinput';nmIn.value=emp[1]; nmIn.addEventListener('change',()=>updateEmp(r,1,nmIn.value));tdNm.appendChild(nmIn);
+      const idIn=document.createElement('input');idIn.className='idinput';idIn.value=emp[0]; idIn.addEventListener('change',()=>updateEmp(r,0,idIn.value)); idIn.addEventListener('keydown',handleArrowNavigation); tdId.appendChild(idIn);
+      const nmIn=document.createElement('input');nmIn.className='nameinput';nmIn.value=emp[1]; nmIn.addEventListener('change',()=>updateEmp(r,1,nmIn.value)); nmIn.addEventListener('keydown',handleArrowNavigation); tdNm.appendChild(nmIn);
     }else{tdId.textContent=emp[0];tdNm.textContent=emp[1];}
     tr.append(tdId,tdNm);
     let count=0;
@@ -200,6 +229,7 @@ function buildTable(table, mode='schedule'){
       if(mode==='schedule'){
         const inp=document.createElement('input');inp.value=val; if(val==='년') inp.classList.add('annual');
         inp.addEventListener('input',()=>{ if(inp.value.trim()==='년') inp.classList.add('annual'); else inp.classList.remove('annual'); updateCell(r,d,inp.value); });
+        inp.addEventListener('keydown',handleArrowNavigation);
         td.appendChild(inp);
       } else {
         td.textContent=val; if(val==='년') td.classList.add('annual');
