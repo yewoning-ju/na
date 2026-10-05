@@ -54,6 +54,9 @@
   .annual{color:var(--sun)!important}
   .label-holiday{font-size:9px;display:block;line-height:10px;color:var(--sun);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 2px}
   .totalval{font-weight:900}
+  tfoot td{background:#f7f3ed;font-weight:900;border-top:2px solid #bdb5a8}
+  tfoot td.summary-label{background:#e9e2d7;font-size:14px}
+  tfoot td.summary-total{background:#f0ebe3;font-weight:900}
   .note{margin-top:10px;color:var(--muted);font-size:12px;line-height:1.6}
   .settings{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
   .card{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:14px}
@@ -239,6 +242,33 @@ function buildTable(table, mode='schedule'){
     const t=document.createElement('td');t.className='total totalval';t.textContent=count;tr.appendChild(t);tb.appendChild(tr);
   });
   table.appendChild(tb);
+
+  // 근무표 하단 오전(A) / 오후(P) 인원 합계
+  if(mode==='schedule'){
+    const tf=document.createElement('tfoot');
+    const summaries=[['오','A'],['후','P']];
+    summaries.forEach(([label,code])=>{
+      const tr=document.createElement('tr');
+      const lab=document.createElement('td'); lab.className='summary-label'; lab.textContent=label; tr.appendChild(lab);
+      let monthTotal=0;
+      const totalCell=document.createElement('td'); totalCell.className='summary-total'; tr.appendChild(totalCell);
+      for(let d=1;d<=n;d++){
+        let daily=0;
+        for(let r=0;r<emps.length;r++){
+          const v=((data[r]||{})[d]||'').trim().toUpperCase();
+          if(v===code) daily++;
+        }
+        monthTotal+=daily;
+        const td=document.createElement('td');
+        const inf=dayClass(y,m,d); td.className=`day ${inf.cls}`; td.textContent=daily;
+        tr.appendChild(td);
+      }
+      totalCell.textContent=monthTotal;
+      const end=document.createElement('td'); end.className='total totalval'; end.textContent=monthTotal; tr.appendChild(end);
+      tf.appendChild(tr);
+    });
+    table.appendChild(tf);
+  }
 }
 
 function updateEmp(r,c,v){ const e=loadEmployees(); e[r][c]=v; saveEmployees(e); buildTable($('#settlementTable'),'settlement'); }
@@ -297,7 +327,21 @@ function makeSheetAOA(mode){
     const vals=[];let cnt=0;
     for(let d=1;d<=n;d++){const raw=((data[r]||{})[d]||'').trim(); if(raw)cnt++; vals.push(mode==='settlement'?sett[r][d]:raw);}
     rows.push([emp[0],emp[1],...vals,cnt]);
-  }); return rows;
+  });
+  if(mode==='schedule'){
+    [['오','A'],['후','P']].forEach(([label,code])=>{
+      const vals=[]; let total=0;
+      for(let d=1;d<=n;d++){
+        let daily=0;
+        for(let r=0;r<emps.length;r++){
+          if((((data[r]||{})[d]||'').trim().toUpperCase())===code) daily++;
+        }
+        vals.push(daily); total+=daily;
+      }
+      rows.push([label,total,...vals,total]);
+    });
+  }
+  return rows;
 }
 function styleSheet(ws,mode){
   const y=+yearSel.value,m=+monthSel.value,n=daysInMonth(y,m),emps=loadEmployees();
@@ -316,7 +360,17 @@ function styleSheet(ws,mode){
     }
   }
   ws['!cols']=[{wch:8},{wch:10},...Array.from({length:n},()=>({wch:5})),{wch:7}];
-  ws['!rows']=[{hpt:28},...Array.from({length:emps.length},()=>({hpt:24}))];
+  if(mode==='schedule'){
+    const summaryStart=1+emps.length;
+    for(let r=summaryStart;r<=summaryStart+1;r++){
+      for(let c=0;c<=range.e.c;c++){
+        const addr=XLSX.utils.encode_cell({r,c}); if(!ws[addr])continue;
+        const base=ws[addr].s||{};
+        ws[addr].s={...base,font:{...(base.font||{}),bold:true},fill:{fgColor:{rgb:c<2?'E9E2D7':'F7F3ED'}},border:thinBorder(),alignment:{horizontal:'center',vertical:'center'}};
+      }
+    }
+  }
+  ws['!rows']=[{hpt:28},...Array.from({length:emps.length+(mode==='schedule'?2:0)},()=>({hpt:24}))];
   ws['!freeze']={xSplit:2,ySplit:1};
 }
 function downloadXlsx(){
